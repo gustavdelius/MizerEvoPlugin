@@ -1,60 +1,6 @@
 #' Set up parameters for an evolutionary model
+#'
 #' this will either set up new params as usual or convert Mizer params to MizerEvo params if given a mizer.params object (TODO)
-#'
-#' This functions creates a `MizerParams` object describing a trait-based
-#' model. This is a simplification of the general size-based model used in
-#' `mizer` in which the species-specific parameters are the same for all
-#' species, except for the asymptotic size, which is considered the most
-#' important trait characterizing a species. Other parameters are related to the
-#' asymptotic size. For example, the size at maturity is given by \code{w_inf *
-#' eta}, where `eta` is the same for all species. For the trait-based model
-#' the number of species is not important. For applications of the trait-based
-#' model see Andersen & Pedersen (2010). See the `mizer` website for more
-#' details and examples of the trait-based model.
-#'
-#' The function has many arguments, all of which have default values. Of
-#' particular interest to the user are the number of species in the model and
-#' the minimum and maximum asymptotic sizes.
-#'
-#' The characteristic weights of the smallest species are defined by
-#' `min_w` (egg size), `min_w_mat` (maturity size) and
-#' `min_w_inf` (asymptotic size). The asymptotic sizes of
-#' the `no_sp` species
-#' are logarithmically evenly spaced, ranging from `min_w_inf` to
-#' `max_w_inf`.
-#' Similarly the maturity sizes of the species are logarithmically evenly
-#' spaced, so that the ratio `eta` between maturity size and asymptotic
-#' size is the same for all species. If \code{egg_size_scaling = TRUE} then also
-#' the ratio between asymptotic size and egg size is the same for all species.
-#' Otherwise all species have the same egg size.
-#'
-#' In addition to setting up the parameters, this function also sets up an
-#' initial condition that is close to steady state.
-#'
-#' Although the trait based model's steady state is often stable without
-#' imposing additional density-dependence, the function can set a Beverton-Holt
-#' type density-dependence that imposes a maximum for the reproduction rate that
-#' is a multiple of the reproduction rate at steady state. That multiple is set
-#' by the argument `R_factor`.
-#'
-#' The search rate coefficient `gamma` is calculated using the expected
-#' feeding level, `f0`.
-#'
-#' The option of including fishing is given, but the steady state may lose its
-#' natural stability if too much fishing is included. In such a case the user
-#' may wish to include stabilising effects (like `R_factor`) to ensure the
-#' steady state is stable. Fishing selectivity is modelled as a knife-edge
-#' function with one parameter, `knife_edge_size`, which is the size at
-#' which species are selected. Each species can either be fished by the same
-#' gear (`knife_edge_size` has a length of 1) or by a different gear (the
-#' length of `knife_edge_size` has the same length as the number of species
-#' and the order of selectivity size is that of the asymptotic size).
-#'
-#' The resulting `MizerParams` object can be projected forward using
-#' \code{project()} like any other `MizerParams` object. When projecting
-#' the model it may be necessary to reduce `dt` below 0.1 to avoid any
-#' instabilities with the solver. You can check this by plotting the biomass or
-#' abundance through time after the projection.
 #'
 #' @param no_sp The number of species in the model.
 #' @param min_w_inf The asymptotic size of the smallest species in the
@@ -97,6 +43,7 @@
 #'   explicitly.
 #' @param gamma Volumetric search rate. If not provided, default is determined
 #'   by [get_gamma_default()] using the value of `f0`.
+#' @param zeta ...
 #' @param ext_mort_prop The proportion of the total mortality that comes from
 #'   external mortality, i.e., from sources not explicitly modelled. A number in
 #'   the interval [0, 1).
@@ -109,6 +56,7 @@
 #' @param knife_edge_size The minimum size at which the gear or gears select
 #'   fish. A single value for each gear or a vector with one value for each
 #'   gear.
+#' @param RDD ...
 #' @param egg_size_scaling If TRUE, the egg size is a constant fraction of the
 #'   maximum size of each species. This fraction is \code{min_w / min_w_inf}. If
 #'   FALSE, all species have the egg size `w_min`.
@@ -128,313 +76,73 @@
 #' plotSpectra(sim)
 #' }
 evoParams <- function(no_sp = 11,
-                           min_w_inf = 10,
-                           max_w_inf = 10 ^ 4,
-                           min_w = 10 ^ (-3),
-                           max_w = max_w_inf,
-                           eta = 10^(-0.6),
-                           min_w_mat = min_w_inf * eta,
-                           no_w = log10(max_w_inf / min_w) * 20 + 1,
-                           min_w_pp = 1e-10,
-                           w_pp_cutoff = min_w_mat,
-                           n = 2 / 3,
-                           p = n,
-                           lambda = 2.05,
-                           r_pp = 0.1,
-                           kappa = 0.005,
-                           alpha = 0.4,
-                           h = 40,
-                           beta = 100,
-                           sigma = 1.3,
-                           f0 = 0.6,
-                           fc = 0.25,
-                           ks = NA,
-                           gamma = NA,
-                           zeta = .2,
-                           ext_mort_prop = 0,
-                           R_factor = 4,
-                           gear_names = "knife_edge_gear",
-                           knife_edge_size = 1000,
-                           RDD = "BevertonHoltRDD",
-                           egg_size_scaling = FALSE,
-                           resource_scaling = FALSE,
-                           perfect_scaling = FALSE) {
+                      min_w_inf = 10,
+                      max_w_inf = 10 ^ 4,
+                      min_w = 10 ^ (-3),
+                      max_w = max_w_inf,
+                      eta = 10^(-0.6),
+                      min_w_mat = min_w_inf * eta,
+                      no_w = log10(max_w_inf / min_w) * 20 + 1,
+                      min_w_pp = 1e-10,
+                      w_pp_cutoff = min_w_mat,
+                      n = 2 / 3,
+                      p = n,
+                      lambda = 2.05,
+                      r_pp = 0.1,
+                      kappa = 0.005,
+                      alpha = 0.4,
+                      h = 40,
+                      beta = 100,
+                      sigma = 1.3,
+                      f0 = 0.6,
+                      fc = 0.25,
+                      ks = NA,
+                      gamma = NA,
+                      zeta = .2,
+                      ext_mort_prop = 0,
+                      R_factor = 4,
+                      gear_names = "knife_edge_gear",
+                      knife_edge_size = 1000,
+                      RDD = "BevertonHoltRDD",
+                      egg_size_scaling = FALSE,
+                      resource_scaling = FALSE,
+                      perfect_scaling = FALSE) {
 
-  ## Check validity of parameters ----
-  # assert_that(is.logical(egg_size_scaling),
-  #             is.logical(resource_scaling),
-  #             is.logical(perfect_scaling))
-  if (ext_mort_prop >= 1 || ext_mort_prop < 0) {
-    stop("ext_mort_prop must be a number between 0 and 1",
-         " because it should be the proportion of the total mortality",
-         " coming from sources other than predation.")
-  }
-  if (R_factor <= 1) {
-    message("R_factor needs to be larger than 1. Setting R_factor = 1.01")
-    R_factor <- 1.01
-  }
-  no_w <- round(no_w)
-  if (no_w < log10(max_w_inf/min_w)*5) {
-    no_w <- round(log10(max_w_inf / min_w) * 5 + 1)
-    message(paste("Increased no_w to", no_w, "so that there are 5 bins ",
-                  "for an interval from w and 10w."))
-  }
-  if (no_w > 10000) {
-    message("Running a simulation with ", no_w,
-            " size bins is going to be very slow.")
-  }
-  if (min_w <= 0) {
-    stop("The smallest egg size min_w must be greater than zero.")
-  }
-  if (min_w_inf >= max_w_inf) {
-    stop("The asymptotic size of the smallest species min_w_inf must be ",
-         "smaller than the asymptotic size of the largest species max_w_inf")
-  }
-  if (min_w >= min_w_mat) {
-    stop("The egg size of the smallest species min_w must be smaller than ",
-         "its maturity size min_w_mat")
-  }
-  if (min_w_mat >= min_w_inf) {
-    stop("The maturity size of the smallest species min_w_mat must be ",
-         "smaller than its maximum size min_w_inf")
-  }
-  no_sp <- as.integer(no_sp)
-  if (no_sp < 2) {
-    stop("The number of species must be at least 2.")
-  }
-  if (!all(c(n, r_pp, lambda, kappa, alpha, h, beta, sigma, f0) > 0)) {
-    stop("The parameters n, lambda, r_pp, kappa, alpha, h, beta, sigma ",
-         "and f0, if supplied, need to be positive.")
-  }
-  if (!is.na(fc) && (fc < 0 || fc > f0)) {
-    stop("The critical feeding level must lie between 0 and f0")
-  }
-  # Check gears
-  if (length(knife_edge_size) > no_sp) {
-    stop("knife_edge_size needs to be no longer than the number of species in the model")
-  }
-  if ((length(knife_edge_size) > 1) & (length(knife_edge_size) != no_sp)) {
-    warning("Length of knife_edge_size is less than number of species so gear information is being recycled. Is this what you want?")
-  }
-  if ((length(gear_names) != 1) & (length(gear_names) != no_sp)) {
-    stop("Length of gear_names argument must equal the number of species.")
-  }
-
-  if (perfect_scaling) {
-    egg_size_scaling <- TRUE
-    resource_scaling <- TRUE
-    w_pp_cutoff <- Inf
-    p <- n
-  }
-
-  ## Set grid points and characteristic sizes ----
-  # in such a way that the sizes all line up with the grid and the species are
-  # all equally spaced.
-
-  # Divide the range from min_w to max_w into (no_w - 1) logarithmic bins of
-  # log size dx so that the last bin starts at max_w
-  min_x <- log10(min_w)
-  max_x <- log10(max_w)
-  dx <- (max_x - min_x) / (no_w - 1)
-  x <- seq(min_x, by = dx, length.out = no_w)
-  w <- 10 ^ x
-
-  # Find index of nearest grid point to min_w_inf that is an integer multiple
-  # of the species spacing away from max_w
-  min_x_inf <- log10(min_w_inf)
-  max_x_inf <- log10(max_w_inf)
-  # bins_per_sp is the number of bins separating species
-  bins_per_sp <- round((max_x_inf - min_x_inf) / (dx * (no_sp - 1)))
-  min_i_inf <- no_w - (no_sp - 1) * bins_per_sp
-  # Maximum sizes for all species
-  w_inf <- w[seq(min_i_inf, by = bins_per_sp, length.out = no_sp)]
-
-  # Find index of nearest grid point to min_w_mat
-  min_x_mat <- log10(min_w_mat)
-  min_i_mat <- round((min_x_mat - min_x) / dx) + 1
-  # Maturity sizes for all species
-  w_mat <- w[seq(min_i_mat, by = bins_per_sp, length.out = no_sp)]
-
-  if (egg_size_scaling) {
-    # Determine egg weights w_min for all species
-    w_min_idx <- seq(1, by = bins_per_sp, length.out = no_sp)
-    w_min <- w[w_min_idx]
-  } else {
-    w_min <- rep(min_w, no_sp)
-    w_min_idx <- rep(1, no_sp)
-  }
-
-  ## Build Params Object ----
-  erepro <- 0.1  # Will be changed later to achieve coexistence
-  species_params <- data.frame(
-    species = as.factor(1:no_sp),
-    w_min = w_min,
-    w_inf = w_inf,
-    w_mat = w_mat,
-    w_min_idx = w_min_idx,
+  params <- newTraitParams(
+    no_sp = no_sp,
+    min_w_inf = min_w_inf,
+    max_w_inf = max_w_inf,
+    min_w = min_w,
+    max_w = max_w,
+    eta = eta,
+    min_w_mat = min_w_mat,
+    no_w = no_w,
+    min_w_pp = min_w_pp,
+    w_pp_cutoff = w_pp_cutoff,
+    n = n,
+    p = p,
+    lambda = lambda,
+    r_pp = r_pp,
+    kappa = kappa,
+    alpha = alpha,
     h = h,
-    ks = ks,
-    f0 = f0,
-    fc = fc,
     beta = beta,
     sigma = sigma,
-    z0 = 0,
-    alpha = alpha,
-    erepro = erepro,
-    lineage = as.factor(1:no_sp), # species is going to be the name, lineage will be the common ancestor
-    zeta = zeta,
-    stringsAsFactors = FALSE
-  )
-  gear_params <- data.frame(
-    gear = gear_names,
-    species = species_params$species,
-    sel_func = "knife_edge",
+    f0 = f0,
+    fc = fc,
+    ks = ks,
+    gamma = gamma,
+    ext_mort_prop = ext_mort_prop,
+    R_factor = R_factor,
+    gear_names = gear_names,
     knife_edge_size = knife_edge_size,
-    catchability = 1,
-    stringsAsFactors = FALSE
-  )
-  params <-
-    newMultispeciesParams(
-      species_params,
-      gear_params = gear_params,
-      min_w = min_w,
-      no_w = no_w,
-      max_w = max_w,
-      w_pp_cutoff = max_w,
-      lambda = lambda,
-      kappa = kappa,
-      n = n,
-      p = p,
-      min_w_pp = min_w_pp,
-      r_pp = r_pp,
-      RDD = RDD
-    )
+    egg_size_scaling = egg_size_scaling,
+    resource_scaling = resource_scaling,
+    perfect_scaling = perfect_scaling)
 
-  w <- params@w
-  dw <- params@dw
-  w_full <- params@w_full
-  ks <- params@species_params$ks[[1]]
-
-  ## Construct steady state solution ----
-
-  # Get constants for steady-state solution
-  # Predation mortality rate coefficient
-  mu0 <- get_power_law_mort(params)
-  # Add backgound mortality rate
-  mu0 <- mu0 / (1 - ext_mort_prop)
-  hbar <- alpha * h * f0 - ks
-  if (hbar < 0) {
-    stop("The feeding level is not sufficient to maintain the fish.")
-  }
-  pow <- mu0 / hbar / (1 - n)
-  if (pow < 1) {
-    message("The ratio of death rate to growth rate is too small, leading to
-                an accumulation of fish at their largest size.")
-  }
-
-  initial_n <- params@psi  # get array with correct dimensions and names
-  initial_n[, ] <- 0
-  mumu <- mu0 * w^(n - 1)  # Death rate
-  i_inf <- min_i_inf  # index of asymptotic size
-  i_min <- 1  # index of natural egg size
-  for (i in 1:no_sp) {
-    gg <- hbar * w^n * (1 - params@psi[i, ])  # Growth rate
-    idx <- w_min_idx[i]:(i_inf - 2)
-    # Steady state solution of the upwind-difference scheme used in project
-    n_exact <- c(1, cumprod(gg[idx] / ((gg + mumu * dw)[idx + 1])))
-    # Use the first species for normalisation
-    if (i == 1) {
-      dist_sp <- bins_per_sp * dx
-      mult <- kappa /
-        sum(n_exact * (w^(lambda - 1) * dw)[1:(min_i_inf - 1)]) *
-        (10^(dist_sp*(1-lambda)/2) - 10^(-dist_sp*(1-lambda)/2)) /
-        (1-lambda)
-    }
-    if (!egg_size_scaling) {
-      n_exact <- n_exact / n_exact[i_min]
-    }
-    idxs <- w_min_idx[i]:(i_inf - 1)
-    initial_n[i, idxs] <- n_exact * mult *
-      (w_inf[1] / w_inf[i]) ^ lambda
-    i_inf <- i_inf + bins_per_sp
-    i_min <- i_min + bins_per_sp
-  }
-
-  # Calculate the community spectrum
-  sc <- colSums(initial_n)
-  params@sc <- sc
-
-  ##  Setup resource ----
-  if (resource_scaling) {
-    resource_vec <- (kappa * w ^ (-lambda)) - sc
-    # Cut off resource at w_pp_cutoff
-    resource_vec[w >= w_pp_cutoff] <- 0
-    if (any(resource_vec < 0)) {
-      if (!perfect_scaling) {
-        # Do not allow negative resource abundance
-        message("Note: Negative resource abundance values overwritten with zeros")
-        resource_vec[resource_vec < 0] <- 0
-      } else {
-        message("Note: Negative resource abundances")
-      }
-    }
-    params@cc_pp[sum(params@w_full <= w[1]):length(params@cc_pp)] <-
-      resource_vec
-  }
-  if (!perfect_scaling) {
-    params@cc_pp[w_full >= w_pp_cutoff] <- 0
-  }
-
-  initial_n_pp <- params@cc_pp
-  # The cc_pp factor needs to be higher than the desired steady state in
-  # order to compensate for predation mortality
-  m2_background <- getResourceMort(params, initial_n, initial_n_pp)
-  params@cc_pp <- (params@rr_pp + m2_background ) * initial_n_pp / params@rr_pp
-
-  ## Setup external death ----
-  m2 <- getPredMort(params, initial_n, initial_n_pp)
-  flag <- FALSE
-  for (i in 1:no_sp) {
-    # The steplike psi was only needed when we wanted to use the analytic
-    # expression for the steady-state solution
-    # params@psi[i,] <- (w / w_inf[i]) ^ (1 - n)
-    # params@psi[i, w < (w_mat[i] - 1e-10)] <- 0
-    # params@psi[i, w > (w_inf[i] - 1e-10)] <- 1
-    params@mu_b[i,] <- mu0 * w ^ (n - 1) - m2[i, ]
-    if (!perfect_scaling && any(params@mu_b[i,] < 0)) {
-      params@mu_b[i, params@mu_b[i,] < 0] <- 0
-    }
-  }
-
-
-  ## Set erepro to meet boundary condition ----
-  rdi <- getRDI(params, initial_n, initial_n_pp)
-  gg <- getEGrowth(params, initial_n, initial_n_pp)
-  mumu <- getMort(params, initial_n, initial_n_pp)
-  erepro_final <- 1:no_sp  # set up vector of right dimension
-  for (i in (1:no_sp)) {
-    gg0 <- gg[i, params@w_min_idx[i]]
-    mumu0 <- mumu[i, params@w_min_idx[i]]
-    DW <- params@dw[params@w_min_idx[i]]
-    erepro_final[i] <- erepro *
-      (initial_n[i, params@w_min_idx[i]] *
-         (gg0 + DW * mumu0)) / rdi[i]
-  }
-  if (is.finite(R_factor)) {
-    # erepro has been multiplied by a factor of (R_factor/(R_factor-1)) to
-    # compensate for using Beverton Holt function.
-    erepro_final <- (R_factor / (R_factor - 1)) * erepro_final
-  }
-  params@species_params$erepro <- erepro_final
-
-  # Record abundance of fish and resource at steady state, as slots.
-  params@initial_n <- initial_n
-  params@initial_n_pp <- initial_n_pp
-  # set rmax=fac*RDD
-  # note that erepro has been multiplied by a factor of (R_factor/(R_factor-1)) to
-  # compensate for using a Beverton Holt function
-  params@species_params$R_max <-
-    (R_factor - 1) * getRDI(params, initial_n, initial_n_pp)
+  params@species_params$zeta <- zeta
+  params@species_params$lineage <- as.factor(1:no_sp)
+  params <- setReproduction(params, RDD = RDD)
 
   return(params)
 }
@@ -487,7 +195,24 @@ finalTouch <- function(folder,params,t_max)
   return(tempRun)
 }
 
-evoProject <- function(params,t_max = 100, mutation = 2,saveFolder)
+#' Project
+#'
+#' @param params ...
+#' @param t_max ...
+#' @param mutation ...
+#' @param folder ...
+#' @return ...
+#' @export
+#' @examples
+#' \donttest{
+#' folder <- file.path(tempdir(), "simTemp")
+#' dir.create(folder)
+#' params <- evoParams(no_sp = 5, RDD = "extinctionRDD")
+#' sim <- evoProject(params = params, t_max = 300, mutation = 5,
+#'                   folder = folder)
+#' plot(sim)
+#' }
+evoProject <- function(params,t_max = 100, mutation = 2, folder)
 {
   t_event <- sort(sample(1:(t_max-1),mutation))
   # corrected_t_event <- t_event+1# need to add 1 per run as they contain a 0 time step (should I get rid of it?)
@@ -664,11 +389,17 @@ addSpecies <- function(params, species_params, interaction, defaultInteraction =
   return(p)
 }
 
-#' stock recruitment relationship enabling extinction of species
+#' Stock recruitment relationship enabling extinction of species
+#'
 #' when a species reaches an abundance threshold its recruitment gets disabled, species is later removed
 #' For now each species acts as its own
 #' TODO make rmax apply at the species level and not inidividual phenotypes
 #' TODO at the moment I am using rdi to apply the threhold but it should be done on n directly
+#'
+#' @param rdi ...
+#' @param species_params ...
+#' @param ... ...
+#' @export
 extinctionRDD <- function(rdi, species_params, ...) {
   if (!("R_max" %in% names(species_params))) {
     stop("The R_max column is missing in species_params.")
