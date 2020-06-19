@@ -3,17 +3,16 @@
 #' First step is to set a mutation vector which tells mizer to stop at certain time so I can add species
 #' TO REMEMBER: the saved step is not per dt but per time_step (so 10 times less) makes things easier but vary less
 rm(list = ls())
-require(mizer)
-
-source("romainZone/evoParams.r")
+require(mizerEvo)
 
 
 #evolution param
-folder <- "romainZone/simTemp"
+folder <- file.path(tempdir(), "simTemp")
+dir.create(folder)
 
 params <- evoParams(no_sp = 5, RDD = "extinctionRDD")
 
-sim <- evoProject(params = params, t_max = 300, mutation = 5, saveFolder = folder)
+sim <- evoProject(params = params, t_max = 300, mutation = 5, folder = folder)
 
 plot(sim)
 
