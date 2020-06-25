@@ -157,7 +157,7 @@ neighbourDistance <- function(x)
 }
 
 #function that paste the different MizerSim objects
-finalTouch <- function(folder,params,t_max)
+finalTouch <- function(saveFolder,params,t_max)
 {
   # for now I am not going to be removing extinct species so the last sim will have the right species dimension
   # the time dimension will be the sum of the time dim of the runs
@@ -174,9 +174,9 @@ finalTouch <- function(folder,params,t_max)
   effort <- array(0, dim = c(t_max+1,length(unique(params@gear_params$gear))), dimnames = list("time" = 1:(t_max+1), "gear" = unique(params@gear_params$gear)))
 
   sim_start = 1
-  for(iRun in 1:length(dir(folder)))
+  for(iRun in 1:length(dir(saveFolder)))
   {
-    tempRun <- readRDS(paste(folder,"/run",iRun,".rds",sep=""))
+    tempRun <- readRDS(paste(saveFolder,"/run",iRun,".rds",sep=""))
     biomass[(sim_start):(sim_start-1+dim(tempRun@n)[1]),1:dim(tempRun@n)[2],] <- tempRun@n
     biomassPP[(sim_start):(sim_start-1+dim(tempRun@n)[1]),] <- tempRun@n_pp
     effort[(sim_start):(sim_start-1+dim(tempRun@n)[1]),] <- tempRun@effort
@@ -200,28 +200,31 @@ finalTouch <- function(folder,params,t_max)
 #' @param params ...
 #' @param t_max ...
 #' @param mutation ...
-#' @param folder ...
+#' @param saveFolder ...
 #' @return ...
 #' @export
 #' @examples
 #' \donttest{
-#' folder <- file.path(tempdir(), "simTemp")
-#' dir.create(folder)
+#' saveFolder <- file.path(tempdir(), "simTemp")
+#' dir.create(saveFolder)
 #' params <- evoParams(no_sp = 5, RDD = "extinctionRDD")
 #' sim <- evoProject(params = params, t_max = 300, mutation = 5,
-#'                   folder = folder)
+#'                   saveFolder = saveFolder)
 #' plot(sim)
 #' }
-evoProject <- function(params,t_max = 100, mutation = 2, folder)
+evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(tempdir(), "simTemp"))
 {
-  t_event <- sort(sample(1:(t_max-1),mutation))
+  # check if saveFolder is ok
+  if(!dir.exists(saveFolder)) dir.create(saveFolder)
+  
+    t_event <- sort(sample(1:(t_max-1),mutation))
   # corrected_t_event <- t_event+1# need to add 1 per run as they contain a 0 time step (should I get rid of it?)
   # we know when the mutations will appear, now we need to calculate the different time intervals bewteen these mutations
   t_max_vec <- neighbourDistance(x = c(t_event,t_max))
 
 
   mySim <- project(params, t_max = t_max_vec[1])
-  saveRDS(mySim,file= paste(folder,"/run1.rds", sep = ""))
+  saveRDS(mySim,file= paste(saveFolder,"/run1.rds", sep = ""))
   for(iSim in 2:length(t_max_vec))
   {
     ## new mutant param
@@ -251,10 +254,11 @@ evoProject <- function(params,t_max = 100, mutation = 2, folder)
 
     params <- addSpecies(params = params, species_params = newSp, init_n= init_n)
     mySim <- project(params, t_max = t_max_vec[iSim])
-    saveRDS(mySim,file= paste(folder,"/run",iSim,".rds", sep = ""))
+    saveRDS(mySim,file= paste(saveFolder,"/run",iSim,".rds", sep = ""))
   }
 
-  sim <- finalTouch(folder = folder, params = params, t_max = t_max)
+  sim <- finalTouch(saveFolder = saveFolder, params = params, t_max = t_max)
+  unlink(saveFolder,recursive = T)
 
   return(sim)
 }
