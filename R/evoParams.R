@@ -326,7 +326,8 @@ addSpecies <- function(params, species_params, interaction, defaultInteraction =
     max_w = max(params@w),
     min_w_pp = min(params@w_full),
     no_w = length(params@w),
-    initial_effort = params@initial_effort
+    initial_effort = params@initial_effort,
+    RDD = params@rates_funcs$RDD
   )
   # Use the same resource spectrum as params
   p@initial_n_pp <- params@initial_n_pp
