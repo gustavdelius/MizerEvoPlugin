@@ -103,7 +103,7 @@ evoParams <- function(no_sp = 11,
                       R_factor = 4,
                       gear_names = "knife_edge_gear",
                       knife_edge_size = 1000,
-                      RDD = "BevertonHoltRDD",
+                      RDD = "extinctionRDD",
                       egg_size_scaling = FALSE,
                       resource_scaling = FALSE,
                       perfect_scaling = FALSE) {
@@ -223,7 +223,9 @@ evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(
   t_max_vec <- neighbourDistance(x = c(t_event,t_max))
 
 
-  mySim <- project(params, t_max = t_max_vec[1])
+  mySim <- project(params, t_max = t_max_vec[1],progress_bar = F)
+  if(length(t_max_vec) >1) # if there is at least one mutation planned
+  {
   saveRDS(mySim,file= paste(saveFolder,"/run1.rds", sep = ""))
   for(iSim in 2:length(t_max_vec))
   {
@@ -253,7 +255,7 @@ evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(
     rownames(init_n)[which(rownames(init_n) == "n_newSp")] <- as.character(newSp$species) # update the name of the mutant accordingly
 
     params <- addSpecies(params = params, species_params = newSp, init_n= init_n)
-    mySim <- project(params, t_max = t_max_vec[iSim])
+    mySim <- project(params, t_max = t_max_vec[iSim],progress_bar = F)
     saveRDS(mySim,file= paste(saveFolder,"/run",iSim,".rds", sep = ""))
   }
 
@@ -261,6 +263,8 @@ evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(
   unlink(saveFolder,recursive = T)
 
   return(sim)
+  }
+  return(mySim) # no mutation, just normal run
 }
 
 addSpecies <- function(params, species_params, interaction, defaultInteraction = 1, init_n) {
