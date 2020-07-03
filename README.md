@@ -1,4 +1,4 @@
-# MizerEvoPlugin
+# mizerEvolution
 This project adds the possibility to simulate evolutionary processes with the Mizer model
 
 At the moment the code is available but needs to be linked with the base mizer package.
