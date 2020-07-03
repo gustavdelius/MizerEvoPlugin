@@ -212,7 +212,7 @@ finalTouch <- function(saveFolder,params,t_max)
 #'                   saveFolder = saveFolder)
 #' plot(sim)
 #' }
-evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(tempdir(), "simTemp"))
+evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(tempdir(), "simTemp"), effort = 0)
 {
   # check if saveFolder is ok
   if(!dir.exists(saveFolder)) dir.create(saveFolder)
@@ -223,7 +223,7 @@ evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(
   t_max_vec <- neighbourDistance(x = c(t_event,t_max))
 
 
-  mySim <- project(params, t_max = t_max_vec[1],progress_bar = F)
+  mySim <- project(params, t_max = t_max_vec[1],progress_bar = F, effort = effort)
   if(length(t_max_vec) >1) # if there is at least one mutation planned
   {
   saveRDS(mySim,file= paste(saveFolder,"/run1.rds", sep = ""))
@@ -255,7 +255,7 @@ evoProject <- function(params,t_max = 100, mutation = 2, saveFolder = file.path(
     rownames(init_n)[which(rownames(init_n) == "n_newSp")] <- as.character(newSp$species) # update the name of the mutant accordingly
 
     params <- addSpecies(params = params, species_params = newSp, init_n= init_n)
-    mySim <- project(params, t_max = t_max_vec[iSim],progress_bar = F)
+    mySim <- project(params, t_max = t_max_vec[iSim],progress_bar = F, effort = effort)
     saveRDS(mySim,file= paste(saveFolder,"/run",iSim,".rds", sep = ""))
   }
 
