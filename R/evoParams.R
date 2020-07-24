@@ -513,7 +513,6 @@ addSpecies <- function(params, species_params, interaction, defaultInteraction =
 #'
 #' when a species reaches an abundance threshold its recruitment gets disabled, species is later removed
 #' For now each species acts as its own
-#' TODO make rmax apply at the species level and not inidividual phenotypes
 #' TODO at the moment I am using rdi to apply the threhold but it should be done on n directly
 #'
 #' @param rdi ...
@@ -524,15 +523,38 @@ extinctionRDD <- function(rdi, species_params, ...) {
   if (!("R_max" %in% names(species_params))) {
     stop("The R_max column is missing in species_params.")
   }
-  rdd <- rdi / (1 + rdi/species_params$R_max)
+  rdiNormal = vector(mode = "numeric", length = length(rdi))
+  names(rdi) <- species_params$lineage
+  for (iSpecies in sort(unique(species_params$lineage))) # makes a vector of value from 0 to 1 showing the abundance proportion of each phenotypes within each species
+  {
+    rdiSp = rdi # save to manip
+    rdiSp[which(names(rdi) != iSpecies)] = 0 # make everything but the targeted species to go 0 to have correct normalisation
+    
+    for (i in 1:length(rdiSp))
+      # in case of NA
+      if (is.na(rdiSp[i]) == TRUE)
+        rdiSp[i] = 1e-30
+    
+    if (sum(rdiSp) != 0)
+      rdiNormal = rdiNormal + rdiSp / sum(rdiSp)
+  }
+  r_maxN = species_params$R_max * rdiNormal # apply the scaling to rmax
+  
+  for (i in 1:length(r_maxN)) # do not want to divide by 0 so replacing the 0 value by the original rmax (does not matter as if there was a 0 value, it means that the rmax is going to be multiplied by 0)
+    if (r_maxN[i] == 0)
+      r_maxN[i] = 1
+  
+  rdd <- rdi / (1 + rdi/r_maxN)
   if(sum(which(rdd <= 1e-30))) rdd[which(rdd <= 1e-30)] <- 0 # if any of the rdd is under threshold, set it to 0
   return(rdd)
 }
 
-library(tidyverse)
+
+
 
 plotDynamics <- function(object, time_range = c(min(as.numeric(dimnames(object@n)$time)),max(as.numeric(dimnames(object@n)$time))), 
-                         phenotype = TRUE, species = NULL, trait = NULL, SpIdx = NULL, print_it = T, returnData = F, save_it = F, nameSave = "Biomass.png", ylimit = c(NA,NA)){
+                         phenotype = TRUE, species = NULL, trait = NULL, SpIdx = NULL, print_it = T, returnData = F, save_it = F, 
+                         nameSave = "Biomass.png", ylimit = c(NA,NA)){
   cbPalette <- c("#999999","#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7") #9 colors for colorblind
   jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")) # colorful gradient
   min_value <- 1e-30
@@ -541,35 +563,34 @@ plotDynamics <- function(object, time_range = c(min(as.numeric(dimnames(object@n
   time_elements <- get_time_elements(object,time_range)
   biomass <- biomass[time_elements,]
   
-  # getting rid of the species that went extinct during the initialisation
+  # find out SpIdx if not given / get rid of fully extinct species
   if (is.null(SpIdx))
-    for (i in unique(object@params@species_params$species))
-      if (sum(biomass[, i]) != 0) # & dim(object@params@species_params[object@params@species_params$species == i, ])[1] != 1)
+    for (i in unique(object@params@species_params$lineage))
+      if (sum(biomass[, i]) != 0) 
         SpIdx = c(SpIdx, i)
   
-  # sum the phenotype biomass per species
+  # sum the biomass across species (no more phenotype identity)
   biomassSp = NULL
   biomassTemp = biomass
-  colnames(biomassTemp) = object@params@species_params$species
+  colnames(biomassTemp) = object@params@species_params$lineage
   for (i in SpIdx)
   {
     biomassPhen = biomassTemp[,which(colnames(biomassTemp) == i)]
-    if(!is.null(dim(biomassPhen))) biomassPhen = apply(biomassPhen,1,sum)
+    if(!is.null(dim(biomassPhen))) biomassPhen = apply(biomassPhen,1,sum,na.rm =T)
     biomassSp = cbind(biomassSp,biomassPhen)
   }
   colnames(biomassSp) = SpIdx
   
-  # apply SpIdx on biomass as well
-  spSub <- object@params@species_params$ecotype[object@params@species_params$species %in% SpIdx]
-  biomass <- biomass[,as.numeric(dimnames(biomass)$species) %in% spSub]
+  # Check if phenotypes are extinct in biomass as well
+  spSub <- object@params@species_params$species[object@params@species_params$lineage %in% SpIdx]
+  biomass <- biomass[,as.numeric(dimnames(biomass)$sp) %in% spSub]
   
   plotBiom <- function(x)
   {
     Biom <- melt(x) # melt for ggplot
     colnames(Biom) = c("time","phen","value")
-    
     # create a species column
-    Biom$sp = sapply(Biom$phen, function(x) as.numeric(unlist(strsplit(as.character(x), "")))[1])
+    Biom$sp = sapply(Biom$phen, function(x) object@params@species_params$lineage[x])
     return(Biom)
   }
   BiomSp <- plotBiom(biomassSp)
@@ -580,6 +601,9 @@ plotDynamics <- function(object, time_range = c(min(as.numeric(dimnames(object@n
   {
     
     BiomPhen <- plotBiom(biomass)
+    BiomPhen <- plotBiom(biomass)
+    if(!is.null(trait))
+      BiomPhen$trait <- rep(trait, each = length(unique(BiomPhen$time)))
     BiomPhen <- BiomPhen[BiomPhen$value >= min_value,]
     
     p <- ggplot(BiomSp) +
