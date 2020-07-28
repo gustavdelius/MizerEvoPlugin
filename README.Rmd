@@ -1,0 +1,493 @@
+
+
+
+---
+title: "Introduction to mizerEvolution"
+output:
+  html_document:
+    toc: yes
+    fig_width: 10
+    fig_height: 5
+---
+
+```{r, initialisation, echo = FALSE, message=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  cache = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = "#>",
+  fig.path = "man/figures/"
+)
+
+#plot parameters
+require(mizerEvolution)
+require(tidyverse)
+require(gridExtra)
+require(grid)
+
+
+
+
+```
+
+
+## Overview
+The mizerEvolution package is an extension of the mizer package (ref) and simulate evolutionary processes within a size-structured model.
+Below are described the X steps to use this package wich are described more in details further down.
+
+
+1. [Installing mizerEvolution]. 
+
+2. [Setting the model parameters]. 
+
+3. [Running a simulation].
+
+4. [Exploring the results].
+
+
+## Installing mizerEvolution
+
+mizerEvolution is an R package available on GitHub so you first need to have R installed on your computer, need devtools package and then start an R session and type:
+
+```{r, download, eval=FALSE}
+devtools::install_github("baldrech/mizerEvolution")
+
+```
+
+After installing mizerEvolution, you need to load it via `library()`.
+
+```{r, install, eval = FALSE}
+library(mizerEvolution)
+```
+
+mizerEvolution is compatible with R versions XX and later.
+The source code for mizerEvolution is hosted on [Github.](https://github.com/baldrech/mizerEvolution)
+
+## Setting the model parameters
+
+As with Mizer, you first need to creat an object of `class ? MizerParams`. At the moment, the wrapper function `evoParams()` helps you create this object. It is a tweaked version of `newTraitParams` which add the necessary parameters to support species evolution, therefore all the default parameters from Mizer are found back in this function. `evoParams()` adds the `lineage` parameter which is used to track the ancetry tree of species and the `RDD` parameter which is used to set the recruitment function. It's default is `extinctionRDD()` which allow species to be removed from the ecosystem when they reach an abundance below $10^{-30}ind.m^{-3}$.
+
+
+
+```{r, new params}
+params <- evoParams(no_sp = 5 )
+```
+
+
+
+## Running a simulation 
+
+This is done by calling the `evoProject()` function (as in "project forward in time") with the model parameters. Similar to Mizer's `project()`, `evoProject()` takes the `mutation` parameter which is the number of new species that are going to be introduced during the simulation length. In the future this parameter will also be a rate of new species appearing in the ecosystem.
+
+```{r, projection}
+sim <- evoProject(params = params, mutation = 1)
+```
+
+This produces an object of class `MizerSim` which contains the results of the simulation. 
+
+
+## Exploring the results
+After a simulation has been run, the results can be examined using a range of `?plotting_functions`, `?summary_functions`
+and `?indicator_functions`.
+The `plot()` function combines several of these plots into one:
+```{r, diagnostic plot}
+plot(sim)
+```
+
+In this default Mizer plot, added phenotypes are considered as new species.
+
+
+<!-- Just as an example: we might be interested in how the proportion of large fish -->
+<!-- varies over time. We can get the proportion of Herrings in terms of biomass that -->
+<!-- have a weight above 50g in each of the 10 years: -->
+<!-- ```{r} -->
+<!-- getProportionOfLargeFish(sim,  -->
+<!--                          #species = "Herring",  -->
+<!--                          threshold_w = 50,  -->
+<!--                          biomass_proportion = TRUE) -->
+<!-- ``` -->
+<!-- We can then use the full power of R to work with these results. -->
+
+<!-- The functionality provided by mizer to explore the simulation results is more -->
+<!-- fully described in  -->
+<!-- [the section on exploring the simulation results.](exploring_the_simulation_results.html) -->
+
+
+## Package functionalities
+
+
+- New species are copy of existing ones albeit with a change to one trait.
+
+- Each projections containing a new species is independent of the others. They are saved in a temporary folder before being binded at the end of the simulation
+
+- New plot functions allow to explore the evolutionary results
+
+## Algorithm
+
+Instead of projecting for the entire time one mizer class object, the evoProject() will only project for a shorter amount of time, until a new species needs to be added in the ecosystem. When adding a new species (time chosen randomly), the projection stops, a new species is added with `addSpecies()`. At the moment, to simulate mutations, the new species is a copy of an existing one albeit for a slight difference in one trait: the maturation size. Further update will include more than one trait (any parameter in the model can become a trait) and mixed reproduction as at the moment new species included this way reproduce independtly from their "parent" and therefore make 2 diffent species.
+Afte adding a new species, a new projection starts. It means that one simulation is in reality a string of small projection. The `finalTouch` function takes all theses projection and makes them into one MizerObject wich is usable by any vanilla Mizer functions.
+
+## Plotting evolutionary results
+
+base Mizer functions cannot handle species being formed of different "sub-species" so all plot functions have been updated to show species or their "phenotypes" using the `lineage` parameter
+
+Checking the biomass through time. The default plot has a colorblind of 10 colors and won't work with more than 10 species, if you want to personalise the plot, use `returnData = TRUE`.
+
+```{r Plot dynamics, echo = F}
+# sim <- get(load("~/predationChapter/romainZone/kappa0.1/run1/run.Rdata"))
+
+plotDynamics(sim)
+
+```
+
+The following plots are not avaialble on this version yet but are examples of what you can get with biomass data and trait evolution through time.
+
+The biomass per trait value of one species through time
+
+```{r Default sim phenotypique diversity, echo = F}
+
+myDat <- readRDS("~/predationChapter/romainZone/completeBiomData.rds")
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000")) # colorful gradient
+
+plot_dat <- filter(myDat, sp == 5, kappa == 0.1, sim == 23)
+colnames(plot_dat)[5] <- "PPMR"
+
+p4<-  ggplot(plot_dat)+
+  stat_smooth(aes(x=time,y=value, group = PPMR, color = PPMR ), se = F) +
+  # scale_x_continuous(name = "Time in years")+
+  scale_y_continuous(trans = "log10", name = expression(paste("Biomass density in g.m"^"-3")))+
+  scale_colour_gradientn(trans = "log10",colours=jet.colors(9), limits = c(NA,NA))+
+  theme(legend.title=element_text(),panel.background = element_rect(fill = "white", color = "black"),
+        panel.grid.minor = element_line(colour = "grey92"), legend.position="bottom",
+        strip.background = element_blank(), legend.key.width = unit(4,"cm"),
+        #legend.justification=c(1,1),
+        legend.key = element_rect(fill = "white"))+
+  # guides(color = guide_legend(nrow=1)) +
+  ggtitle(NULL)
+p4
+
+```
+
+The trait value through time. It's shown at the species level which is the biomass weighted average of the species' phenotypes
+
+
+
+```{r trait through time, echo = F}
+
+## Pannel b) - Trait variation with predation ==============
+colfunc <- colorRampPalette(c("firebrick3","darkturquoise", "orange"))
+SpIdx <- 1:9
+
+# traitDF <- readRDS(file = "~/mizerFIE/romainZone/TraitPred.rds")
+# # converts to %
+# traitDF[[1]]$percentMean <- traitDF[[1]]$percentMean*100
+# traitDF[[2]]$percentMean <- traitDF[[2]]$percentMean*100
+# traitDF[[1]]$sd <- traitDF[[1]]$sd*100
+# traitDF[[2]]$sd <- traitDF[[2]]$sd*100
+# 
+# # do the trait average in the traitDF and sd
+# plot_dat <- NULL
+# for (type in 1) # taking only the un-fished for this plot
+# {
+#   a<- traitDF[[type]]
+#   a$group <- sapply(a$group, function(x) as.numeric(unlist(strsplit(as.character(x), "")))[1])
+#   a<-a[order(a$time),]
+#   
+#   myMat <- matrix(NA, nrow = length(unique(a$time))*length(unique(a$group)), ncol = 4, dimnames = list(NULL, c("time","percentMean","sd","group")))
+#   counter = 1
+#   for (no_sp in unique(a$group))
+#   {
+#     tempSp <- a[which(a$group == no_sp),]
+#     for (x in unique(tempSp$time))
+#     {
+#       temp_dat <- tempSp[which(tempSp$time == x),]
+#       meanX <- mean(temp_dat$percentMean)
+#       sdX <- sd(temp_dat$percentMean)
+#       myMat[counter,] <- c(x,meanX,sdX,no_sp)
+#       counter = counter +1
+#     }
+#   }
+#   plot_dat <- as.data.frame(myMat) # this a 3 col data frame with the averaged trait values of the species across runs
+# }
+# 
+# temp <- data.frame("time" = rep(0,no_sp), "percentMean" = rep(0,no_sp), "sd" = rep(0,no_sp),"group" = seq(1,no_sp))
+# plot_dat <- rbind(temp,plot_dat)
+# saveRDS(plot_dat, file = "romainZone/traitData.rds")
+plot_dat <- readRDS("romainZone/traitData.rds")
+
+colGrad <- colfunc(length(SpIdx))
+names(colGrad) <- SpIdx
+
+
+
+# force smoothing to pass by 0
+pTemp <- ggplot(plot_dat)+ # do the smoothing
+  stat_smooth(aes(x=time,y=percentMean, group = group, color = as.factor(group)), method = "loess", span = 0.15, se = F, size = 0.5)
+
+gg3 <- ggplot_build(pTemp)
+# change value for un fished
+a <- gg3[[1]][[1]]
+a$y[which(a$x == 0)] <- 0
+gg3[[1]][[1]] <- a
+
+
+
+# without forced smoothing
+# p2 <- ggplot(plot_dat[[1]])+
+# #geom_line(aes(x=time,y=percentMean, group = group, color = as.factor(group), linetype = "un-fished")) +
+# stat_smooth(aes(x=time,y=percentMean, group = group, color = as.factor(group), linetype = "un-fished"), method = "loess", span = 0.15, se = F, size = 0.5) +
+# #geom_ribbon(data = dfRibbon1, aes(x = x, ymin = ymin, ymax = ymax, group = group), fill = "grey", alpha = 0.1)+
+# stat_smooth(data = plot_dat[[2]], aes(x=time,y=percentMean, group = group, color = as.factor(group) , linetype = "fished"),method = "loess", span = 0.15, se = F, size = 0.5)+
+# #geom_ribbon(data = dfRibbon2, aes(x = x, ymin = ymin, ymax = ymax, group = group), fill = "red", alpha = 0.035)+
+
+p2 <- ggplot(gg3[[1]][[1]])+
+  geom_line(aes(x=x,y=y, color = as.factor(group), linetype = "un-fished"), size = 0.5) +
+  # geom_line(data = gg3[[1]][[2]], aes(x=x,y=y, color = as.factor(group), linetype = "fished"), size = 0.5) +
+  scale_x_continuous(name = "Time in years", limits = c(NA,NA))+
+  scale_y_continuous(name = "Percent change", limits = c(NA,NA), breaks = seq(-100,150,50))+
+  # geom_vline(xintercept = fishStart, linetype = "dashed") +
+  scale_color_manual(name = "Species", values = colGrad)+
+  # scale_linetype_manual(name = "Fisheries", values = colLine)+
+  theme(legend.title=element_text(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        # panel.grid.minor = element_line(colour = "grey92"), 
+        legend.position="bottom",
+        legend.key = element_rect(fill = "white"))+
+  guides(color = guide_legend(nrow=1))+
+         #linetype = guide_legend(order = 2,override.aes = list(colour = "black")))+
+  ggtitle(NULL)
+
+p2
+
+
+```
+
+
+Looking at the fitness of one species (total spawn output throughtout lifetime) per trait value
+
+
+
+```{r fitness, echo = F}
+iTime =1
+fitnessNorm <- readRDS("/rd/gem/private/users/romainf/MizerEvo/Sim9/fitnessSaves2.0/fitnessNormal.rds")
+fitnessFish <- readRDS("/rd/gem/private/users/romainf/MizerEvo/Sim9/fitnessSaves2.0/fitnessFisheries.rds")
+fitnessNormNoI <- readRDS("/rd/gem/private/users/romainf/MizerEvo/SimNoInter9/fitnessSaves2.0/fitnessNormal.rds")
+fitnessFishNoI <- readRDS("/rd/gem/private/users/romainf/MizerEvo/SimNoInter9/fitnessSaves2.0/fitnessFisheries.rds")
+
+myDataN <- fitnessNorm[,c("trait","species","sim",iTime)]
+colnames(myDataN) <- c("trait","species","sim","fitness")
+myDataN <- myDataN[-which(myDataN$fitness == 0),]
+myDataN$scenario <- "un-fished"
+myDataN$interaction <- "predation"
+
+myDataF <- fitnessFish[,c("trait","species","sim",iTime)]
+colnames(myDataF) <- c("trait","species","sim","fitness")
+myDataF <- myDataF[-which(myDataF$fitness == 0),]
+myDataF$scenario <- "fished"
+myDataF$interaction <- "predation"
+
+myDataNnoI <- fitnessNormNoI[,c("trait","species","sim",iTime)]
+colnames(myDataNnoI) <- c("trait","species","sim","fitness")
+myDataNnoI <- myDataNnoI[-which(myDataNnoI$fitness == 0),]
+myDataNnoI$scenario <- "un-fished"
+myDataNnoI$interaction <- "no predation"
+
+myDataFnoI <- fitnessFishNoI[,c("trait","species","sim",iTime)]
+colnames(myDataFnoI) <- c("trait","species","sim","fitness")
+myDataFnoI <- myDataFnoI[-which(myDataFnoI$fitness == 0),]
+myDataFnoI$scenario <- "fished"
+myDataFnoI$interaction <- "no predation"
+
+plot_dat <- rbind(myDataN,myDataF,myDataNnoI,myDataFnoI)
+plot_dat$interaction_f = factor(plot_dat$interaction, levels=c("no predation","predation")) # to define column order
+
+
+# p <- ggplot(plot_dat) +
+#   geom_point(aes(x=trait, y = fitness, color = scenario, group = scenario)) +
+#   scale_x_continuous(name = "Maturation size in g", trans = "log10") +
+#   scale_y_continuous(name = "Fitness", trans = "log10", limits = c(NA,NA))+
+#   # facet_grid(species ~ interaction,scales = "free")+
+#   facet_grid_sc(species ~ interaction,scales = list(y = scales_y) )+
+#   # scale_colour_manual(values=cbPalette, name = "Species")+ # colorblind
+#   theme(legend.title=element_text(),
+#         panel.background = element_rect(fill = "white", color = "black"),
+#         panel.grid.minor = element_line(colour = "grey92"),
+#         legend.position="bottom",
+#         legend.key = element_rect(fill = "white"))+
+#   guides(color = guide_legend(nrow=1),
+#          linetype = guide_legend(order = 2,override.aes = list(colour = "black")))+
+#   ggtitle(NULL)
+
+# plots without facet for paper format
+stripNames <- c("no predation" = "a) Without predation", "predation" = "b) With predation")
+p1 <- ggplot(plot_dat %>% filter(species == 7, interaction == "predation")) +
+  geom_point(aes(x=trait,y=fitness, color = scenario), size = 0.5) +
+  scale_y_continuous(trans = "log10", name = "Fitness", limits = c(1e-2,1e4)) +
+  scale_x_continuous(name = "Maturation size", trans = "log10") +
+  scale_color_manual(values = c("red","black")) +
+  # facet_grid(.~interaction_f, scales = "free", labeller = as_labeller(stripNames)) +
+  theme(legend.title=element_text(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        # panel.grid.minor = element_line(colour = "grey92"),
+        # legend.justification=c(1,1),
+        legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text.x = element_text(),#element_text(c("no predation","predation")),
+        legend.key = element_rect(fill = "white"))+
+  ggtitle(NULL)
+
+p1
+```
+
+
+When two traits are involved
+
+
+```{r fitness 2 traits, echo = F}
+
+KKNNIn <- readRDS("/rd/gem/private/users/romainf/mizerEvoMerging/simulations/initAdd/KKNN.rds")
+KKNNGW <- readRDS("/rd/gem/private/users/romainf/mizerEvoMerging/simulations/GW/backup/KKNN.rds")
+# KKNNGW <- readRDS("romainZone/sensitivity/mu/GW/10/KKNN.rds")
+
+#update time
+
+KKNNIn$time <- KKNNIn$time + 2000
+KKNNGW$time <- KKNNGW$time + 3000
+
+plot_dat <- rbind(KKNNIn, KKNNGW)
+plot_dat <- filter(plot_dat, time >=2950 & time <=3100)
+# correction t_d <- Topt
+plot_dat$t_d <- plot_dat$t_d -1.75
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000","maroon4"))
+colorScale <- c(0,.05,.1,.15,.2,.25,.6,1)
+
+# to edit the facet names
+time.labs <- c("a) before warming","b) 50 years of warming", "c) 100 years of warming","d) 150 years of warming")
+names(time.labs) <- c("2950","3001","3050","3100")
+
+plot_dat$value[plot_dat$value < 1e-5] <- 1e-5
+
+p1 <- ggplot(filter(plot_dat, species == 8, time == 2950)) +
+  geom_raster(aes(x = t_d, y = ed_int, fill = value)) +
+  scale_fill_gradientn(trans = "log10",colours=jet.colors(10),#values = colorScale, 
+                       breaks = c(1e-5,1e-3,1e-2,1e-1,1)) +
+  # geom_point(aes(x = t_d, y = ed_int, size = value), alpha = .25)+
+  # scale_radius(trans = "log10") +
+  scale_x_continuous(name = "Temperature optimum")+
+  scale_y_continuous(name = "Generalist/Specialist")+
+  labs(fill = "Fitness")+
+  theme(legend.title=element_text(),
+        legend.justification=c(1,1),
+        legend.key = element_rect(fill = "white"),
+        panel.background = element_rect(fill = "white", color = "black"),
+        legend.key.height = unit(2,"cm"),
+        strip.background = element_blank(),
+        panel.grid.minor = element_line(colour = "grey92"))+
+  ggtitle(NULL)
+
+p1
+
+
+
+```
+
+
+Checking the average number of phenotypes per species through time.
+
+
+```{r number of phenotypes, echo = F}
+
+plot_datPred <- readRDS(file = "~/mizerFIE/romainZone/PhenDataPred.rds")
+plot_datPred <- plot_datPred[[1]]
+plot_datPred$scenario <- "predation"
+temp <- plot_datPred
+plot_datPred <- plot_datPred[,-4]
+plot_datPred$fisheries <- "un-fished"
+colnames(plot_datPred)[3] <- "value"
+temp$fisheries <- "fished"
+temp <- temp[,-3]
+colnames(temp)[3] <- "value"
+plot_datPred <- rbind(plot_datPred,temp)
+
+plot_datNoPred <- readRDS(file = "~/mizerFIE/romainZone/PhenDataNoPred.rds")
+plot_datNoPred <- plot_datNoPred[[1]]
+plot_datNoPred$scenario <- "no predation"
+temp <- plot_datNoPred
+plot_datNoPred <- plot_datNoPred[,-4]
+plot_datNoPred$fisheries <- "un-fished"
+colnames(plot_datNoPred)[3] <- "value"
+temp$fisheries <- "fished"
+temp <- temp[,-3]
+colnames(temp)[3] <- "value"
+plot_datNoPred <- rbind(plot_datNoPred,temp)
+
+plot_dat <- rbind(plot_datPred,plot_datNoPred) 
+plot_dat$species <- as.factor(plot_dat$species)
+
+colGrad <- colfunc(length(SpIdx))
+names(colGrad) <- SpIdx
+
+p <- ggplot(filter(plot_dat,scenario == "predation", fisheries == "un-fished")) +
+  stat_smooth(aes(x = time, y = value, color = species), method = "loess", span = 0.15, se = F, size = 0.5)+
+  scale_x_continuous(name = "Time in years")+
+  scale_y_continuous(name = "Number of phenotypes") +
+  scale_color_manual(name = "Species", values = colGrad)+
+  theme(panel.background = element_rect(fill = "white", color = "black"),
+        strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.key = element_rect(fill = "white"))+ 
+  guides(color = guide_legend(nrow=1)) +
+  ggtitle(NULL)
+
+p
+
+```
+
+
+Add physio plots here
+
+
+```{r, size spectrum, echo = F}
+
+#plotSS(sim)
+
+```
+
+
+## Species invasion
+
+Instead of generating phenotypic diverstity within existing species, the model can instead introduce mutants in an existing ecosystem. One just needs to give a data frame to the mutation argument instead of a numeric.
+
+```{r species invasion}
+
+params<- evoParams()
+
+alien <- params@species_params[4:5,] # copy existing data frame
+alien$h <- 50 # change some parameters
+alien$alpha <- .6
+alien$time <- c(50,75) # when are the invasive species coming in?
+alien$lineage <- factor(99,levels = 99) # need to specify a lineage for these species otherwise they will be related to the endemic ones
+alien$init_n_multiplier <- NULL # multiplier for the initial abundance
+
+sim <- evoProject(params = params, mutation = alien)
+plot(sim)
+
+```
+
+
+
+
+
+
+New plot function have also been introduced to track the change in trait value through time and to calculate the fitness of each species (here being the total spawn output throughout lifetime of a cohort, averaged per individual) to study the effect of the evolutionary processes on the ecoystem
+
+## Future updates
+
+- Fast initialisation
+- What else?
+
+
+
+
