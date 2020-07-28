@@ -4,10 +4,8 @@
 ---
 title: "Introduction to mizerEvolution"
 output:
-  html_document:
-    toc: yes
-    fig_width: 10
-    fig_height: 5
+  github_document
+
 ---
 
 ```{r, initialisation, echo = FALSE, message=FALSE}
