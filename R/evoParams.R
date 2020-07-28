@@ -212,18 +212,50 @@ finalTouch <- function(saveFolder,params,t_max)
 #'                   saveFolder = saveFolder)
 #' plot(sim)
 #' }
-evoProject <- function(params,t_max = 100, 
+evoProject <- function(params,t_max = 100, dt = 0.1, 
                        mutation = 2, trait = "w_mat",
                        saveFolder = file.path(tempdir(), "simTemp"), effort = 0)
 {
+  # Initialisation
+  SpIdx <- unique(params@species_params$species)
   # check if saveFolder is ok
   if(!dir.exists(saveFolder)) dir.create(saveFolder)
   
-    t_event <- sort(sample(1:(t_max-1),mutation))
-  # corrected_t_event <- t_event+1# need to add 1 per run as they contain a 0 time step (should I get rid of it?)
-  # we know when the mutations will appear, now we need to calculate the different time intervals bewteen these mutations
+  if(is.numeric(mutation))
+  {
+# users gives a mutation rate per species per year in %, it is converted into a matrix giving which species gets mutant at which time_step
+  mutationPerSteps <- mutation#*dt
+  t_mutation <- matrix(0,nrow = length(SpIdx), ncol = (t_max/1), dimnames = list("species" = SpIdx, "time" = 1:(t_max/1)))  
+  for(iSpecies in SpIdx) # for each species
+  {
+    for(iTime in 1:(t_max/1)) # for each time step
+    {
+      if(mutationPerSteps >= sample(seq(0,100,.1), 1))
+        t_mutation[iSpecies,iTime] <- 1
+    }
+  }
+  t_event <- apply(t_mutation,2,sum) # t_mutation knows which species mutates and t_event knows which time
+  t_event <- which(t_event >=1)
+# t_event <- floor(t_event*dt) # need to go back to this dimension as project(that I cannot change) is going to divide by dt
+# but I start to get issues
+# if(t_event[1] == 0) t_event[1] = 1
+#print(t_event)
+#print(t_mutation)
+  } else if (is.data.frame(mutation))
+  {
+    # species invastion case
+    t_event <- mutation$time
+    
+  } else (stop("what do you want from me!? I said, numeric only!"))
+  
+  # use this if want specific number of mutation
+  # t_event <- sort(sample(1:(t_max-1),mutation))
+  # # corrected_t_event <- t_event+1# need to add 1 per run as they contain a 0 time step (should I get rid of it?)
+  # # we know when the mutations will appear, now we need to calculate the different time intervals between these mutations
   t_max_vec <- neighbourDistance(x = c(t_event,t_max))
-
+  cat(sprintf('%i mutants will be added\n', (length(t_max_vec)-1)))
+  # print(t_mutation)
+  # print(t_max_vec)
 
   mySim <- project(params, t_max = t_max_vec[1],progress_bar = F, effort = effort)
   if(length(t_max_vec) >1) # if there is at least one mutation planned
@@ -231,11 +263,17 @@ evoProject <- function(params,t_max = 100,
   saveRDS(mySim,file= paste(saveFolder,"/run1.rds", sep = ""))
   for(iSim in 2:length(t_max_vec))
   {
+    #print(iSim)
+    if(is.numeric(mutation))
+    {
     ## new mutant param
     # randomly take a resident
-    resident <- as.character(sample(mySim@params@species_params$species, 1))
+    resident <- as.character(which(t_mutation[,t_event[iSim-1]]>0)[1]) # not handling 2 new mutatns at the same time for now
+    #print(resident)
+    # resident <- as.character(sample(mySim@params@species_params$species, 1))
 
     # create a new species param
+
     newSp <- mySim@params@species_params[resident,] # get a copy of the resident
 # switch to determine what happens to the new species
     #TODO  need to rewrite the specific cases properly
@@ -349,27 +387,58 @@ evoProject <- function(params,t_max = 100,
 
            })
     
-
-    newSp$species <-factor(as.character(max(as.numeric(mySim@params@species_params$species))+1), levels = max(as.numeric(mySim@params@species_params$species))+1) # new species name but lineage stays the same
-
-    # Decide who the parent is
-
     # set the abundance for all species to start a new project
     lastBiom <- mySim@n[dim(mySim@n)[1],,]
-    n_newSp <- rep(0,dim(mySim@n)[3])
-    n_newSp = 0.05 * lastBiom[dimnames(mySim@n)$sp ==resident,] # the initial abundance is 5% of the resident pop
+    #n_newSp <- rep(0,dim(mySim@n)[3])
+    n_newSp = 0.05 * lastBiom[dimnames(mySim@n)$sp == resident,] # the initial abundance is 5% of the resident pop
     lastBiom[dimnames(mySim@n)$sp ==resident,]= lastBiom[dimnames(mySim@n)$sp == resident,] - 0.05*lastBiom[dimnames(mySim@n)$sp ==resident,] # Witdraw the abundance of the mutant from its parent (we're not talking about eggs here but different ecotype already present)
-
+    
+    
+} else if (is.data.frame(mutation))
+{
+  newSp <- mutation[iSim-1,]
+  
+  lastBiom <- mySim@n[dim(mySim@n)[1],,]
+  n_newSp <- rep(0,dim(mySim@n)[3])
+  #need to create size spectrum of abundance from one value
+  n0_mult = mutation$init_n_multiplier
+  a = 0.35
+ 
+    no_w <- length(params@w)
+    initial_n <- array(NA, dim = c(1, no_w))
+    # N = N0 * Winf^(2*n-q-2+a) * w^(-n-a)
+    # Reverse calc n and q from intake_max and search_vol slots (could add get_n function)
+    n <- (log(params@intake_max[,1] / params@species_params$h) / log(params@w[1]))[1]
+    q <- (log(params@search_vol[,1] / params@species_params$gamma) / log(params@w[1]))[1]
+    # Guessing at a suitable n0 value based on kappa - this was figured out using trial and error and should be updated
+    if (is.null(n0_mult)) {
+      lambda <- 2 + q - n
+      kappa <- params@cc_pp[1] / (params@w_full[1]^(-lambda))
+      n0_mult <- kappa / 1000
+    }
+    initial_n <- unlist(tapply(params@w, 1:no_w, function(wx,n0_mult,w_inf,a,n,q)
+      n0_mult * w_inf^(2 * n - q - 2 + a) * wx^(-n - a),
+      n0_mult = n0_mult, w_inf = mutation$w_inf[iSim-1], a=a, n=n, q=q))
+    #set densities at w > w_inf to 0
+    initial_n[unlist(tapply(params@w,1:no_w,function(wx,w_inf) w_inf<wx, w_inf=mutation$w_inf[iSim-1]))] <- 0
+    # Also any densities at w < w_min set to 0
+    initial_n[unlist(tapply(params@w,1:no_w,function(wx,w_min)w_min>wx, w_min=mutation$w_min[iSim-1]))] <- 0    
+n_newSp <- t(initial_n)
+}
+    newSp$species <-factor(as.character(max(as.numeric(mySim@params@species_params$species))+1), levels = max(as.numeric(mySim@params@species_params$species))+1) # new species name but lineage stays the same
 
     init_n <- rbind(lastBiom,n_newSp) # this include the new mutant as last column
     names(dimnames(init_n)) <- c("sp","w")
-    rownames(init_n)[which(rownames(init_n) == "n_newSp")] <- as.character(newSp$species) # update the name of the mutant accordingly
+    # print(newSp)
+    rownames(init_n)[length(rownames((init_n)))] <- as.character(newSp$species) # update the name of the mutant accordingly
 
     params <- addSpecies(params = params, species_params = newSp, init_n= init_n)
+    if(t_max_vec[iSim]>0) # happens if mutant appears at the last time step, makes the code crash
     mySim <- project(params, t_max = t_max_vec[iSim],progress_bar = F, effort = effort)
+    
     saveRDS(mySim,file= paste(saveFolder,"/run",iSim,".rds", sep = ""))
   }
-
+# return(list(saveFolder,params,t_max))
   sim <- finalTouch(saveFolder = saveFolder, params = params, t_max = t_max)
   unlink(saveFolder,recursive = T)
 
